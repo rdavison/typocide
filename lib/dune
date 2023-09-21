@@ -1,0 +1,7 @@
+(library
+ (name leveltypeml)
+ (libraries core async notty notty_async)
+ (preprocess
+  (pps ppx_jane))
+ (inline_tests)
+ (flags -open Core -open Async))
