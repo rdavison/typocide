@@ -12,15 +12,6 @@ module Pos = struct
   let ( + ) (x1, y1) (x2, y2) = x1 + x2, y1 + y2
 end
 
-module Pos3 = struct
-  module T = struct
-    type t = int * int * int [@@deriving sexp, compare]
-  end
-
-  include T
-  include Comparable.Make (T)
-end
-
 module Model : sig
   type word =
     { id : int
