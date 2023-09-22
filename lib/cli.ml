@@ -41,6 +41,8 @@ module Model : sig
     ; text : text
     ; problem_words : int String.Map.t
     ; prev_words : int String.Map.t String.Map.t
+    ; next_words : int String.Map.t String.Map.t
+    ; triples : int String.Map.t String.Map.t
     ; mode : [ `Main | `Practice of string list ]
     }
   [@@deriving sexp]
@@ -51,6 +53,8 @@ module Model : sig
     -> text:string
     -> mode:[ `Main | `Practice of string list ]
     -> prev_words:int String.Map.t String.Map.t
+    -> next_words:int String.Map.t String.Map.t
+    -> triples:int String.Map.t String.Map.t
     -> t
 
   val set_dim : t -> Pos.t -> t
@@ -77,6 +81,8 @@ end = struct
     ; text : text
     ; problem_words : int String.Map.t
     ; prev_words : int String.Map.t String.Map.t
+    ; next_words : int String.Map.t String.Map.t
+    ; triples : int String.Map.t String.Map.t
     ; mode : [ `Main | `Practice of string list ]
     }
   [@@deriving sexp]
@@ -156,7 +162,7 @@ end = struct
     |> String.concat ~sep:" "
   ;;
 
-  let create ~dim ~cursor ~text ~mode ~prev_words =
+  let create ~dim ~cursor ~text ~mode ~prev_words ~next_words ~triples =
     let text =
       sanitize_text text
       |> make_text ~dim
@@ -164,34 +170,84 @@ end = struct
         if info.id = 0 then { info with state = `Active } else info)
     in
     let problem_words = Map.empty (module String) in
-    { dim; cursor; text; mode; problem_words; prev_words }
+    { dim; cursor; text; mode; problem_words; prev_words; next_words; triples }
   ;;
 
   let make_practice_text t word =
     let practice_len = 10 in
-    match Map.find t.prev_words word with
-    | None -> List.init practice_len ~f:(Fn.const word) |> String.concat ~sep:" "
-    | Some prevs ->
+    match Map.find t.prev_words word, Map.find t.next_words word with
+    | None, None -> List.init practice_len ~f:(Fn.const word) |> String.concat ~sep:" "
+    | Some prevs, Some nexts ->
       let prevs =
         Map.to_alist prevs
         |> List.fold ~init:[] ~f:(fun acc (prev, count) ->
           List.init count ~f:(Fn.const prev) @ acc)
         |> Array.of_list
       in
-      let len = Array.length prevs in
-      List.init practice_len ~f:(fun i ->
-        ignore i;
-        prevs.(Random.int len))
+      let prev_len = Array.length prevs in
+      let nexts =
+        Map.to_alist nexts
+        |> List.fold ~init:[] ~f:(fun acc (next, count) ->
+          List.init count ~f:(Fn.const next) @ acc)
+        |> Array.of_list
+      in
+      let next_len = Array.length nexts in
+      let prevs =
+        List.init practice_len ~f:(fun _ -> prevs.(Random.int prev_len))
+        |> List.map ~f:(fun prev -> sprintf "%s %s" prev word)
+      in
+      let nexts =
+        List.init practice_len ~f:(fun _ -> nexts.(Random.int next_len))
+        |> List.map ~f:(fun next -> sprintf "%s %s" word next)
+      in
+      let triples =
+        Map.find_exn t.triples word
+        |> Map.to_alist
+        |> List.fold ~init:[] ~f:(fun acc (triple, count) ->
+          List.init count ~f:(Fn.const triple) @ acc)
+        |> Array.of_list
+      in
+      let triples_len = Array.length triples in
+      let triples =
+        List.init (practice_len * 3) ~f:(fun _ -> triples.(Random.int triples_len))
+      in
+      let all = triples @ prevs @ nexts |> Array.of_list in
+      let len = Array.length all in
+      List.init practice_len ~f:(fun _ -> all.(Random.int len)) |> String.concat ~sep:" "
+    | Some prevs, None ->
+      let prevs =
+        Map.to_alist prevs
+        |> List.fold ~init:[] ~f:(fun acc (prev, count) ->
+          List.init count ~f:(Fn.const prev) @ acc)
+        |> Array.of_list
+      in
+      let prev_len = Array.length prevs in
+      List.init practice_len ~f:(fun _ -> prevs.(Random.int prev_len))
       |> List.concat_map ~f:(fun prev -> [ prev; word ])
+      |> String.concat ~sep:" "
+    | None, Some nexts ->
+      let nexts =
+        Map.to_alist nexts
+        |> List.fold ~init:[] ~f:(fun acc (next, count) ->
+          List.init count ~f:(Fn.const next) @ acc)
+        |> Array.of_list
+      in
+      let next_len = Array.length nexts in
+      List.init practice_len ~f:(fun _ -> nexts.(Random.int next_len))
+      |> List.concat_map ~f:(fun next -> [ word; next ])
       |> String.concat ~sep:" "
   ;;
 
   let update_problems t =
     let arr = Array.of_list t.text in
+    let len = Array.length arr in
     let problem_words = ref t.problem_words in
     let prev_words = ref t.prev_words in
-    for i = 0 to Array.length arr - 1 do
+    let next_words = ref t.next_words in
+    let triples = ref t.triples in
+    for i = 0 to len - 1 do
       let prev = i - 1 in
+      let next = i + 1 in
       let focus = arr.(i) in
       if not (String.equal focus.word focus.typed)
       then (
@@ -209,9 +265,40 @@ end = struct
                  | Some map ->
                    Map.update map prev_word ~f:(function
                      | None -> 1
+                     | Some n -> n + 1)));
+        next_words
+          := if next >= len
+             then !next_words
+             else (
+               let next_word = arr.(next).word in
+               Map.update !next_words focus.word ~f:(function
+                 | None -> Map.singleton (module String) next_word 1
+                 | Some map ->
+                   Map.update map next_word ~f:(function
+                     | None -> 1
+                     | Some n -> n + 1)));
+        triples
+          := if prev < 0 || next >= len
+             then !triples
+             else (
+               let triple =
+                 let prev_word = arr.(prev).word in
+                 let next_word = arr.(next).word in
+                 sprintf "%s %s %s" prev_word focus.word next_word
+               in
+               Map.update !triples focus.word ~f:(function
+                 | None -> Map.singleton (module String) triple 1
+                 | Some map ->
+                   Map.update map triple ~f:(function
+                     | None -> 1
                      | Some n -> n + 1))))
     done;
-    { t with problem_words = !problem_words; prev_words = !prev_words }
+    { t with
+      problem_words = !problem_words
+    ; prev_words = !prev_words
+    ; next_words = !next_words
+    ; triples = !triples
+    }
   ;;
 
   let process_endgame t =
@@ -226,7 +313,14 @@ end = struct
       | `Practice [] -> `Main, next_text (), t
       | `Practice (word :: rest) -> `Practice rest, make_practice_text t word, t
     in
-    create ~dim:t.dim ~cursor:(0, 0) ~text ~mode ~prev_words:t.prev_words
+    create
+      ~dim:t.dim
+      ~cursor:(0, 0)
+      ~text
+      ~mode
+      ~prev_words:t.prev_words
+      ~next_words:t.next_words
+      ~triples:t.triples
   ;;
 
   let handle_keypress t c =
@@ -312,14 +406,18 @@ let run () =
            ~cursor:(0, 0)
            ~text:(next_text ())
            ~mode:`Main
-           ~prev_words:m.prev_words)
+           ~prev_words:m.prev_words
+           ~next_words:m.next_words
+           ~triples:m.triples)
        else
          Model.create
            ~dim:(Term.size term)
            ~cursor:(0, 0)
            ~text:(next_text ())
            ~mode:`Main
-           ~prev_words:(Map.empty (module String)))
+           ~prev_words:(Map.empty (module String))
+           ~next_words:(Map.empty (module String))
+           ~triples:(Map.empty (module String)))
   in
   don't_wait_for
     (Pipe.iter_without_pushback events ~f:(fun ev ->
