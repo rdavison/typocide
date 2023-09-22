@@ -1,8 +1,17 @@
 open! Import
 module Term = Notty_async.Term
 
-let text =
-  {|I think that if I ever have kids, and they are upset, I won't tell them that people are starving in China or anything like that because it wouldn't change the fact that they were upset. And even if somebody else has it much worse, that doesn't really change the fact that you have what you have.|}
+let next_text =
+  let texts =
+    Stdio.In_channel.read_lines "corpus.txt"
+    |> List.filter_map ~f:(fun line ->
+      match String.strip line with
+      | "" -> None
+      | line -> Some line)
+    |> Array.of_list
+  in
+  let len = Array.length texts in
+  fun () -> texts.(Random.int len)
 ;;
 
 module Pos = struct
@@ -22,16 +31,28 @@ module Model : sig
     ; typed : string
     ; state : [ `New | `Active | `Success | `Failure ]
     }
+  [@@deriving sexp]
 
-  type text = word list
+  type text = word list [@@deriving sexp]
 
-  type t = private
+  type t =
     { dim : Pos.t
     ; cursor : Pos.t
     ; text : text
+    ; problem_words : int String.Map.t
+    ; prev_words : int String.Map.t String.Map.t
+    ; mode : [ `Main | `Practice of string list ]
     }
+  [@@deriving sexp]
 
-  val create : dim:Pos.t -> cursor:Pos.t -> t
+  val create
+    :  dim:Pos.t
+    -> cursor:Pos.t
+    -> text:string
+    -> mode:[ `Main | `Practice of string list ]
+    -> prev_words:int String.Map.t String.Map.t
+    -> t
+
   val set_dim : t -> Pos.t -> t
   val render : t -> Notty.image
   val set_cursor : t -> Pos.t -> t
@@ -46,16 +67,19 @@ end = struct
     ; typed : string
     ; state : [ `New | `Active | `Success | `Failure ]
     }
-  [@@deriving sexp_of]
+  [@@deriving sexp]
 
-  type text = word list [@@deriving sexp_of]
+  type text = word list [@@deriving sexp]
 
   type t =
     { dim : Pos.t
     ; cursor : Pos.t
     ; text : text
+    ; problem_words : int String.Map.t
+    ; prev_words : int String.Map.t String.Map.t
+    ; mode : [ `Main | `Practice of string list ]
     }
-  [@@deriving sexp_of]
+  [@@deriving sexp]
 
   open Notty
   open Notty.Infix
@@ -89,7 +113,9 @@ end = struct
   let%expect_test "test breaking" =
     let dim = 72, 10 in
     let s =
-      make_text text ~dim |> List.map ~f:(fun info -> info.word) |> String.concat ~sep:" "
+      make_text (next_text ()) ~dim
+      |> List.map ~f:(fun info -> info.word)
+      |> String.concat ~sep:" "
     in
     print_endline s;
     [%expect
@@ -130,14 +156,77 @@ end = struct
     |> String.concat ~sep:" "
   ;;
 
-  let create ~dim ~cursor =
+  let create ~dim ~cursor ~text ~mode ~prev_words =
     let text =
       sanitize_text text
       |> make_text ~dim
       |> List.map ~f:(fun info ->
         if info.id = 0 then { info with state = `Active } else info)
     in
-    { dim; cursor; text }
+    let problem_words = Map.empty (module String) in
+    { dim; cursor; text; mode; problem_words; prev_words }
+  ;;
+
+  let make_practice_text t word =
+    let practice_len = 10 in
+    match Map.find t.prev_words word with
+    | None -> List.init practice_len ~f:(Fn.const word) |> String.concat ~sep:" "
+    | Some prevs ->
+      let prevs =
+        Map.to_alist prevs
+        |> List.fold ~init:[] ~f:(fun acc (prev, count) ->
+          List.init count ~f:(Fn.const prev) @ acc)
+        |> Array.of_list
+      in
+      let len = Array.length prevs in
+      List.init practice_len ~f:(fun i ->
+        ignore i;
+        prevs.(Random.int len))
+      |> List.concat_map ~f:(fun prev -> [ prev; word ])
+      |> String.concat ~sep:" "
+  ;;
+
+  let update_problems t =
+    let arr = Array.of_list t.text in
+    let problem_words = ref t.problem_words in
+    let prev_words = ref t.prev_words in
+    for i = 0 to Array.length arr - 1 do
+      let prev = i - 1 in
+      let focus = arr.(i) in
+      if not (String.equal focus.word focus.typed)
+      then (
+        problem_words
+          := Map.update !problem_words focus.word ~f:(function
+               | None -> 1
+               | Some n -> n + 1);
+        prev_words
+          := if prev < 0
+             then !prev_words
+             else (
+               let prev_word = arr.(prev).word in
+               Map.update !prev_words focus.word ~f:(function
+                 | None -> Map.singleton (module String) prev_word 1
+                 | Some map ->
+                   Map.update map prev_word ~f:(function
+                     | None -> 1
+                     | Some n -> n + 1))))
+    done;
+    { t with problem_words = !problem_words; prev_words = !prev_words }
+  ;;
+
+  let process_endgame t =
+    let mode, text, t =
+      match t.mode with
+      | `Main ->
+        let t = update_problems t in
+        let problem_words = Map.to_alist t.problem_words |> List.map ~f:fst in
+        (match problem_words with
+         | fst :: rest -> `Practice rest, make_practice_text t fst, t
+         | [] -> `Main, next_text (), t)
+      | `Practice [] -> `Main, next_text (), t
+      | `Practice (word :: rest) -> `Practice rest, make_practice_text t word, t
+    in
+    create ~dim:t.dim ~cursor:(0, 0) ~text ~mode ~prev_words:t.prev_words
   ;;
 
   let handle_keypress t c =
@@ -158,7 +247,8 @@ end = struct
           then { info with state = `Active }
           else info)
       in
-      { t with text }
+      let t = { t with text } in
+      if wordnum' >= List.length t.text then process_endgame t else t
     | _ ->
       let text =
         List.map t.text ~f:(fun info ->
@@ -210,13 +300,37 @@ let run () =
   let%bind term = Term.create () in
   let events = Term.events term in
   let stop = Pipe.closed events in
-  let m = ref (Model.create ~dim:(Term.size term) ~cursor:(0, 0)) in
+  let m =
+    ref
+      (if Sys_unix.file_exists_exn "save_state.sexp"
+       then (
+         let m =
+           Core.In_channel.read_all "save_state.sexp" |> Sexp.of_string |> Model.t_of_sexp
+         in
+         Model.create
+           ~dim:(Term.size term)
+           ~cursor:(0, 0)
+           ~text:(next_text ())
+           ~mode:`Main
+           ~prev_words:m.prev_words)
+       else
+         Model.create
+           ~dim:(Term.size term)
+           ~cursor:(0, 0)
+           ~text:(next_text ())
+           ~mode:`Main
+           ~prev_words:(Map.empty (module String)))
+  in
   don't_wait_for
     (Pipe.iter_without_pushback events ~f:(fun ev ->
        match ev with
        | `Key key ->
          (match key with
-          | `ASCII 'C', [ `Ctrl ] -> Pipe.close_read events
+          | `ASCII 'C', [ `Ctrl ] ->
+            Stdio.Out_channel.write_all
+              "save_state.sexp"
+              ~data:(Model.sexp_of_t !m |> Sexp.to_string);
+            Pipe.close_read events
           | `ASCII c, [] -> m := Model.handle_keypress !m c
           | _ -> ())
        | `Resize size -> m := Model.set_dim !m size
