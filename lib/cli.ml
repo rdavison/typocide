@@ -61,6 +61,7 @@ module Model : sig
   val render : t -> Notty.image
   val set_cursor : t -> Pos.t -> t
   val handle_keypress : t -> char -> t
+  val process_endgame : t -> t
 end = struct
   type word =
     { id : int
@@ -211,7 +212,9 @@ end = struct
       let triples =
         List.init (practice_len * 3) ~f:(fun _ -> triples.(Random.int triples_len))
       in
-      let all = triples @ prevs @ nexts |> Array.of_list in
+      ignore prevs;
+      ignore nexts;
+      let all = triples |> Array.of_list in
       let len = Array.length all in
       List.init practice_len ~f:(fun _ -> all.(Random.int len)) |> String.concat ~sep:" "
     | Some prevs, None ->
@@ -249,7 +252,7 @@ end = struct
       let prev = i - 1 in
       let next = i + 1 in
       let focus = arr.(i) in
-      if not (String.equal focus.word focus.typed)
+      if (not (String.is_empty focus.typed)) && not (String.equal focus.word focus.typed)
       then (
         problem_words
           := Map.update !problem_words focus.word ~f:(function
@@ -301,6 +304,17 @@ end = struct
     }
   ;;
 
+  let should_repeat t =
+    let correct, total =
+      List.fold t.text ~init:(0, 0) ~f:(fun (correct, total) word ->
+        (correct + if String.equal word.word word.typed then 1 else 0), total + 1)
+    in
+    let correct = Float.of_int correct in
+    let total = Float.of_int total in
+    let accuracy = correct /. total in
+    Float.( < ) accuracy 0.93
+  ;;
+
   let process_endgame t =
     let mode, text, t =
       match t.mode with
@@ -310,8 +324,20 @@ end = struct
         (match problem_words with
          | fst :: rest -> `Practice rest, make_practice_text t fst, t
          | [] -> `Main, next_text (), t)
-      | `Practice [] -> `Main, next_text (), t
-      | `Practice (word :: rest) -> `Practice rest, make_practice_text t word, t
+      | `Practice [] ->
+        if should_repeat t
+        then
+          ( `Practice []
+          , List.map t.text ~f:(fun word -> word.word) |> String.concat ~sep:" "
+          , t )
+        else `Main, next_text (), t
+      | `Practice (word :: rest) ->
+        if should_repeat t
+        then
+          ( `Practice (word :: rest)
+          , List.map t.text ~f:(fun word -> word.word) |> String.concat ~sep:" "
+          , t )
+        else `Practice rest, make_practice_text t word, t
     in
     create
       ~dim:t.dim
@@ -390,6 +416,17 @@ end = struct
   ;;
 end
 
+let cursor_to_col_row (wordnum, offset) ~(text : Model.text) =
+  List.find_map text ~f:(fun word ->
+    if wordnum = word.id
+    then
+      Some
+        ( word.line_offset
+          + Int.max offset (Int.min (String.length word.word) (String.length word.typed))
+        , word.row )
+    else None)
+;;
+
 let run () =
   let%bind term = Term.create () in
   let events = Term.events term in
@@ -430,11 +467,13 @@ let run () =
               ~data:(Model.sexp_of_t !m |> Sexp.to_string);
             Pipe.close_read events
           | `ASCII c, [] -> m := Model.handle_keypress !m c
+          | `Tab, [] -> m := Model.process_endgame !m
           | _ -> ())
        | `Resize size -> m := Model.set_dim !m size
        | _ -> ()));
   Clock.every' (sec 0.05) ~stop (fun () ->
     let%bind () = Term.image term (Model.render !m) in
+    let%bind () = Term.cursor term (cursor_to_col_row !m.cursor ~text:!m.text) in
     return ());
   stop
 ;;
