@@ -29,13 +29,13 @@ module Model : sig
     ; line_offset : int
     ; word : string
     ; typed : string
-    ; state : [ `New | `Active | `Success | `Failure ]
+    ; state : [ `New | `Pending | `Active | `Success | `Failure ]
     }
   [@@deriving sexp]
 
   type text = word list [@@deriving sexp]
 
-  type t =
+  type t = private
     { dim : Pos.t
     ; cursor : Pos.t
     ; text : text
@@ -62,6 +62,7 @@ module Model : sig
   val set_cursor : t -> Pos.t -> t
   val handle_keypress : t -> char -> t
   val process_endgame : t -> t
+  val process_tab : t -> t
 end = struct
   type word =
     { id : int
@@ -70,7 +71,7 @@ end = struct
     ; line_offset : int
     ; word : string
     ; typed : string
-    ; state : [ `New | `Active | `Success | `Failure ]
+    ; state : [ `New | `Pending | `Active | `Success | `Failure ]
     }
   [@@deriving sexp]
 
@@ -114,7 +115,7 @@ end = struct
         (col, row, line_offset), word))
     |> List.concat
     |> List.mapi ~f:(fun id ((col, row, line_offset), word) ->
-      { id; col; row; line_offset; word; typed = ""; state = `New })
+      { id; col; row; line_offset; word; typed = ""; state = `Pending })
   ;;
 
   let%expect_test "test breaking" =
@@ -168,7 +169,7 @@ end = struct
       sanitize_text text
       |> make_text ~dim
       |> List.map ~f:(fun info ->
-        if info.id = 0 then { info with state = `Active } else info)
+        if info.id = 0 then { info with state = `New } else info)
     in
     let problem_words = Map.empty (module String) in
     { dim; cursor; text; mode; problem_words; prev_words; next_words; triples }
@@ -315,6 +316,61 @@ end = struct
     Float.( < ) accuracy 0.93
   ;;
 
+  let current_word t =
+    let wordnum, offset = t.cursor in
+    List.find_exn t.text ~f:(fun info -> info.id = wordnum)
+  ;;
+
+  let restart_game t =
+    let cursor = 0, 0 in
+    let text =
+      List.map t.text ~f:(fun word ->
+        let state = if word.id = 0 then `New else `Pending in
+        let typed = "" in
+        { word with state; typed })
+    in
+    { t with cursor; text }
+  ;;
+
+  let process_tab t =
+    let current_word = current_word t in
+    let mode, text, t =
+      match t.mode with
+      | `Main | `Practice [] ->
+        if current_word.id = 0
+        then (
+          match current_word.state with
+          | `New -> `Main, next_text (), t
+          | _ ->
+            let t = restart_game t in
+            ( t.mode
+            , List.map t.text ~f:(fun word -> word.word) |> String.concat ~sep:" "
+            , t ))
+        else
+          `Main, List.map t.text ~f:(fun word -> word.word) |> String.concat ~sep:" ", t
+      | `Practice (next_text :: rest) ->
+        if current_word.id = 0
+        then (
+          match current_word.state with
+          | `New -> `Practice rest, make_practice_text t next_text, t
+          | _ ->
+            let t = restart_game t in
+            ( t.mode
+            , List.map t.text ~f:(fun word -> word.word) |> String.concat ~sep:" "
+            , t ))
+        else
+          t.mode, List.map t.text ~f:(fun word -> word.word) |> String.concat ~sep:" ", t
+    in
+    create
+      ~dim:t.dim
+      ~cursor:(0, 0)
+      ~text
+      ~mode
+      ~prev_words:t.prev_words
+      ~next_words:t.next_words
+      ~triples:t.triples
+  ;;
+
   let process_endgame t =
     let mode, text, t =
       match t.mode with
@@ -373,7 +429,7 @@ end = struct
       let text =
         List.map t.text ~f:(fun info ->
           if info.id = wordnum
-          then { info with typed = info.typed ^ String.of_char c }
+          then { info with typed = info.typed ^ String.of_char c; state = `Active }
           else info)
       in
       let t = { t with text } in
@@ -403,9 +459,9 @@ end = struct
           then (
             let attr =
               match state with
-              | `New -> A.empty
-              | `Active -> if i < len_typed then A.fg A.green else A.empty
-              | `Success -> A.fg A.lightgreen
+              | `New | `Pending -> A.empty
+              | `Active -> if i < len_typed then A.fg A.lightgreen else A.empty
+              | `Success -> A.fg A.green
               | `Failure -> A.fg A.red
             in
             let board = place (I.string attr (String.of_char word.[i])) pos board in
@@ -467,7 +523,7 @@ let run () =
               ~data:(Model.sexp_of_t !m |> Sexp.to_string);
             Pipe.close_read events
           | `ASCII c, [] -> m := Model.handle_keypress !m c
-          | `Tab, [] -> m := Model.process_endgame !m
+          | `Tab, [] -> m := Model.process_tab !m
           | _ -> ())
        | `Resize size -> m := Model.set_dim !m size
        | _ -> ()));
