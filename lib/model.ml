@@ -409,3 +409,7 @@ let get dim =
     ~next_words
     ~triples
 ;;
+
+let save_state t =
+  Stdio.Out_channel.write_all "save_state.sexp" ~data:(sexp_of_t t |> Sexp.to_string)
+;;
