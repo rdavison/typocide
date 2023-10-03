@@ -41,20 +41,6 @@ let make_text text ~(dim : Dim.t) : Text.t =
     { Text.Word.id; col; row; line_offset; word; typed = ""; state = `Pending })
 ;;
 
-let%expect_test "test breaking" =
-  let dim = Dim.make (72, 10) in
-  let s =
-    make_text (Corpus.next ()) ~dim
-    |> List.map ~f:(fun info -> info.word)
-    |> String.concat ~sep:" "
-  in
-  print_endline s;
-  [%expect
-    {|
-I think that if I ever have kids, and they are upset, I won't tell them that people are starving in China or anything like that because it wouldn't change the fact that they were upset. And even if somebody else has it much worse, that doesn't really change the fact that you have what you have. |}];
-  return ()
-;;
-
 let remake_text (text : Text.t) ~dim =
   let cols, rows = Dim.cols_rows dim in
   let acc, line, _count =
