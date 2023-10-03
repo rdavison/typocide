@@ -1,18 +1,6 @@
 open! Import
 module Term = Notty_async.Term
 
-let cursor_to_col_row cursor ~(text : Text.t) =
-  let wordnum, offset = Cursor.id_offset cursor in
-  List.find_map text ~f:(fun word ->
-    if wordnum = word.id
-    then
-      Some
-        ( word.line_offset
-          + Int.max offset (Int.min (String.length word.word) (String.length word.typed))
-        , word.row )
-    else None)
-;;
-
 let run () =
   let%bind term = Term.create () in
   let events = Term.events term in
@@ -59,7 +47,7 @@ let run () =
        | _ -> ()));
   Clock.every' (sec 0.05) ~stop (fun () ->
     let%bind () = Term.image term (Model.render !m) in
-    let%bind () = Term.cursor term (cursor_to_col_row !m.cursor ~text:!m.text) in
+    let%bind () = Term.cursor term (Text.col_row_of_cursor !m.text ~cursor:!m.cursor) in
     return ());
   stop
 ;;

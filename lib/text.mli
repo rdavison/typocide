@@ -14,3 +14,5 @@ module Word : sig
 end
 
 type t = Word.t list [@@deriving sexp]
+
+val col_row_of_cursor : t -> cursor:Cursor.t -> (int * int) option
