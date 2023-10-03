@@ -1,7 +1,8 @@
 open! Import
 module Term = Notty_async.Term
 
-let cursor_to_col_row (wordnum, offset) ~(text : Model.text) =
+let cursor_to_col_row cursor ~(text : Text.t) =
+  let wordnum, offset = Cursor.id_offset cursor in
   List.find_map text ~f:(fun word ->
     if wordnum = word.id
     then
@@ -24,8 +25,8 @@ let run () =
            Core.In_channel.read_all "save_state.sexp" |> Sexp.of_string |> Model.t_of_sexp
          in
          Model.create
-           ~dim:(Term.size term)
-           ~cursor:(0, 0)
+           ~dim:(Dim.make (Term.size term))
+           ~cursor:(Cursor.make (0, 0))
            ~text:(Quote.next_text ())
            ~mode:`Main
            ~prev_words:m.prev_words
@@ -33,8 +34,8 @@ let run () =
            ~triples:m.triples)
        else
          Model.create
-           ~dim:(Term.size term)
-           ~cursor:(0, 0)
+           ~dim:(Dim.make (Term.size term))
+           ~cursor:(Cursor.make (0, 0))
            ~text:(Quote.next_text ())
            ~mode:`Main
            ~prev_words:(Map.empty (module String))
@@ -54,7 +55,7 @@ let run () =
           | `ASCII c, [] -> m := Model.handle_keypress !m c
           | `Tab, [] -> m := Model.process_tab !m
           | _ -> ())
-       | `Resize size -> m := Model.set_dim !m size
+       | `Resize size -> m := Model.set_dim !m (Dim.make size)
        | _ -> ()));
   Clock.every' (sec 0.05) ~stop (fun () ->
     let%bind () = Term.image term (Model.render !m) in

@@ -1,8 +1,8 @@
 open! Import
 
 type t =
-  { dim : Pos.t
-  ; cursor : Pos.t
+  { dim : Dim.t
+  ; cursor : Cursor.t
   ; text : Text.t
   ; problem_words : int String.Map.t
   ; prev_words : int String.Map.t String.Map.t
@@ -18,8 +18,8 @@ open Notty.Infix
 let place img (x, y) on_ = I.hcat [ I.void x 1; I.vcat [ I.void 1 y; img ] ] </> on_
 let set_cursor t cursor = { t with cursor }
 
-let make_text text ~(dim : Pos.t) : Text.t =
-  let cols, rows = dim in
+let make_text text ~(dim : Dim.t) : Text.t =
+  let cols, rows = Dim.cols_rows dim in
   let acc, line, _count =
     text
     |> String.split ~on:' '
@@ -42,7 +42,7 @@ let make_text text ~(dim : Pos.t) : Text.t =
 ;;
 
 let%expect_test "test breaking" =
-  let dim = 72, 10 in
+  let dim = Dim.make (72, 10) in
   let s =
     make_text (Quote.next_text ()) ~dim
     |> List.map ~f:(fun info -> info.word)
@@ -56,7 +56,7 @@ I think that if I ever have kids, and they are upset, I won't tell them that peo
 ;;
 
 let remake_text (text : Text.t) ~dim =
-  let cols, rows = dim in
+  let cols, rows = Dim.cols_rows dim in
   let acc, line, _count =
     text
     |> List.fold ~init:([], [], 0) ~f:(fun (acc, line, cumul) word ->
@@ -239,12 +239,12 @@ let should_repeat t =
 ;;
 
 let current_word t =
-  let wordnum, offset = t.cursor in
+  let wordnum, offset = Cursor.id_offset t.cursor in
   List.find_exn t.text ~f:(fun info -> info.id = wordnum)
 ;;
 
 let restart_game t =
-  let cursor = 0, 0 in
+  let cursor = Cursor.make (0, 0) in
   let text =
     List.map t.text ~f:(fun word ->
       let state = if word.id = 0 then `New else `Pending in
@@ -279,7 +279,7 @@ let process_tab t =
   in
   create
     ~dim:t.dim
-    ~cursor:(0, 0)
+    ~cursor:(Cursor.make (0, 0))
     ~text
     ~mode
     ~prev_words:t.prev_words
@@ -313,7 +313,7 @@ let process_endgame t =
   in
   create
     ~dim:t.dim
-    ~cursor:(0, 0)
+    ~cursor:(Cursor.make (0, 0))
     ~text
     ~mode
     ~prev_words:t.prev_words
@@ -322,11 +322,11 @@ let process_endgame t =
 ;;
 
 let handle_keypress t c =
-  let wordnum, offset = t.cursor in
+  let wordnum, offset = Cursor.id_offset t.cursor in
   match c with
   | ' ' ->
-    let t = { t with cursor = wordnum + 1, 0 } in
-    let wordnum', offset' = t.cursor in
+    let t = { t with cursor = Cursor.make (wordnum + 1, 0) } in
+    let wordnum', offset' = Cursor.id_offset t.cursor in
     let text =
       List.map t.text ~f:(fun info ->
         if info.id = wordnum
@@ -354,12 +354,14 @@ let handle_keypress t c =
        if offset < len
        then (
          let c' = info.word.[offset] in
-         if Char.equal c c' then { t with cursor = wordnum, offset + 1 } else t)
+         if Char.equal c c'
+         then { t with cursor = Cursor.make (wordnum, offset + 1) }
+         else t)
        else t)
 ;;
 
 let render t =
-  let width, height = t.dim in
+  let width, height = Dim.cols_rows t.dim in
   let board = I.char A.empty ' ' width height in
   List.fold
     t.text
