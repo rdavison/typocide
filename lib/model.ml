@@ -386,3 +386,26 @@ let render t =
       in
       loop 0 board)
 ;;
+
+let restore_state () =
+  if Sys_unix.file_exists_exn "save_state.sexp"
+  then Some (Core.In_channel.read_all "save_state.sexp" |> Sexp.of_string |> t_of_sexp)
+  else None
+;;
+
+let get dim =
+  let prev_words, next_words, triples =
+    match restore_state () with
+    | Some state -> state.prev_words, state.next_words, state.triples
+    | None ->
+      Map.empty (module String), Map.empty (module String), Map.empty (module String)
+  in
+  create
+    ~dim
+    ~cursor:(Cursor.make (0, 0))
+    ~text:(Quote.next_text ())
+    ~mode:`Main
+    ~prev_words
+    ~next_words
+    ~triples
+;;

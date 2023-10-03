@@ -5,31 +5,7 @@ let run () =
   let%bind term = Term.create () in
   let events = Term.events term in
   let stop = Pipe.closed events in
-  let m =
-    ref
-      (if Sys_unix.file_exists_exn "save_state.sexp"
-       then (
-         let m =
-           Core.In_channel.read_all "save_state.sexp" |> Sexp.of_string |> Model.t_of_sexp
-         in
-         Model.create
-           ~dim:(Dim.make (Term.size term))
-           ~cursor:(Cursor.make (0, 0))
-           ~text:(Quote.next_text ())
-           ~mode:`Main
-           ~prev_words:m.prev_words
-           ~next_words:m.next_words
-           ~triples:m.triples)
-       else
-         Model.create
-           ~dim:(Dim.make (Term.size term))
-           ~cursor:(Cursor.make (0, 0))
-           ~text:(Quote.next_text ())
-           ~mode:`Main
-           ~prev_words:(Map.empty (module String))
-           ~next_words:(Map.empty (module String))
-           ~triples:(Map.empty (module String)))
-  in
+  let m = ref (Model.get (Dim.make (Term.size term))) in
   don't_wait_for
     (Pipe.iter_without_pushback events ~f:(fun ev ->
        match ev with

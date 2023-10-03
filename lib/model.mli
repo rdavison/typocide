@@ -28,3 +28,4 @@ val set_cursor : t -> Cursor.t -> t
 val handle_keypress : t -> char -> t
 val process_endgame : t -> t
 val process_tab : t -> t
+val get : Dim.t -> t
