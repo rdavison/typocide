@@ -1,22 +1,9 @@
 open! Import
 
-type word =
-  { id : int
-  ; col : int
-  ; row : int
-  ; line_offset : int
-  ; word : string
-  ; typed : string
-  ; state : [ `New | `Pending | `Active | `Success | `Failure ]
-  }
-[@@deriving sexp]
-
-type text = word list [@@deriving sexp]
-
 type t = private
   { dim : Pos.t
   ; cursor : Pos.t
-  ; text : text
+  ; text : Text.t
   ; problem_words : int String.Map.t
   ; prev_words : int String.Map.t String.Map.t
   ; next_words : int String.Map.t String.Map.t

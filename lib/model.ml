@@ -1,22 +1,9 @@
 open! Import
 
-type word =
-  { id : int
-  ; col : int
-  ; row : int
-  ; line_offset : int
-  ; word : string
-  ; typed : string
-  ; state : [ `New | `Pending | `Active | `Success | `Failure ]
-  }
-[@@deriving sexp]
-
-type text = word list [@@deriving sexp]
-
 type t =
   { dim : Pos.t
   ; cursor : Pos.t
-  ; text : text
+  ; text : Text.t
   ; problem_words : int String.Map.t
   ; prev_words : int String.Map.t String.Map.t
   ; next_words : int String.Map.t String.Map.t
@@ -31,7 +18,7 @@ open Notty.Infix
 let place img (x, y) on_ = I.hcat [ I.void x 1; I.vcat [ I.void 1 y; img ] ] </> on_
 let set_cursor t cursor = { t with cursor }
 
-let make_text text ~(dim : Pos.t) : text =
+let make_text text ~(dim : Pos.t) : Text.t =
   let cols, rows = dim in
   let acc, line, _count =
     text
@@ -51,7 +38,7 @@ let make_text text ~(dim : Pos.t) : text =
       (col, row, line_offset), word))
   |> List.concat
   |> List.mapi ~f:(fun id ((col, row, line_offset), word) ->
-    { id; col; row; line_offset; word; typed = ""; state = `Pending })
+    { Text.Word.id; col; row; line_offset; word; typed = ""; state = `Pending })
 ;;
 
 let%expect_test "test breaking" =
@@ -68,7 +55,7 @@ I think that if I ever have kids, and they are upset, I won't tell them that peo
   return ()
 ;;
 
-let remake_text (text : text) ~dim =
+let remake_text (text : Text.t) ~dim =
   let cols, rows = dim in
   let acc, line, _count =
     text
