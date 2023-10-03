@@ -1,6 +1,6 @@
 open! Import
 
-let next_text =
+let next =
   let texts =
     Stdio.In_channel.read_lines "corpus.txt"
     |> List.filter_map ~f:(fun line ->

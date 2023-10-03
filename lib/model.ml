@@ -44,7 +44,7 @@ let make_text text ~(dim : Dim.t) : Text.t =
 let%expect_test "test breaking" =
   let dim = Dim.make (72, 10) in
   let s =
-    make_text (Quote.next_text ()) ~dim
+    make_text (Corpus.next ()) ~dim
     |> List.map ~f:(fun info -> info.word)
     |> String.concat ~sep:" "
   in
@@ -262,7 +262,7 @@ let process_tab t =
       if current_word.id = 0
       then (
         match current_word.state with
-        | `New -> `Main, Quote.next_text (), t
+        | `New -> `Main, Corpus.next (), t
         | _ ->
           let t = restart_game t in
           t.mode, List.map t.text ~f:(fun word -> word.word) |> String.concat ~sep:" ", t)
@@ -295,14 +295,14 @@ let process_endgame t =
       let problem_words = Map.to_alist t.problem_words |> List.map ~f:fst in
       (match problem_words with
        | fst :: rest -> `Practice rest, make_practice_text t fst, t
-       | [] -> `Main, Quote.next_text (), t)
+       | [] -> `Main, Corpus.next (), t)
     | `Practice [] ->
       if should_repeat t
       then
         ( `Practice []
         , List.map t.text ~f:(fun word -> word.word) |> String.concat ~sep:" "
         , t )
-      else `Main, Quote.next_text (), t
+      else `Main, Corpus.next (), t
     | `Practice (word :: rest) ->
       if should_repeat t
       then
@@ -403,7 +403,7 @@ let get dim =
   create
     ~dim
     ~cursor:(Cursor.make (0, 0))
-    ~text:(Quote.next_text ())
+    ~text:(Corpus.next ())
     ~mode:`Main
     ~prev_words
     ~next_words
