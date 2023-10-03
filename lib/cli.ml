@@ -1,9 +1,7 @@
 open! Import
 module Term = Notty_async.Term
 
-let frames_per_second = 60
-
-let main () =
+let main ~frames_per_second () =
   let%bind term = Term.create () in
   let events = Term.events term in
   let stop = Pipe.closed events in
@@ -30,9 +28,9 @@ let main () =
 
 let command =
   Command.async
-    ~summary:"Test of Notty_async"
-    (let open Command.Let_syntax in
-     let%map_open () = return () in
-     main)
+    ~summary:"Typing tutor inspired by Leveltype"
     ~behave_nicely_in_pipeline:false
+    (let open Command.Let_syntax in
+     let%map_open frames_per_second = return 60 in
+     main ~frames_per_second)
 ;;
