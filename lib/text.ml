@@ -6,7 +6,7 @@ module Word = struct
     ; col : int
     ; row : int
     ; line_offset : int
-    ; word : string
+    ; data : string
     ; typed : string
     ; state : [ `New | `Pending | `Active | `Success | `Failure ]
     }
@@ -22,7 +22,7 @@ let col_row_of_cursor (t : t) ~cursor =
     then
       Some
         ( word.line_offset
-          + Int.max offset (Int.min (String.length word.word) (String.length word.typed))
+          + Int.max offset (Int.min (String.length word.data) (String.length word.typed))
         , word.row )
     else None)
 ;;

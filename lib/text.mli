@@ -6,7 +6,7 @@ module Word : sig
     ; col : int
     ; row : int
     ; line_offset : int
-    ; word : string
+    ; data : string
     ; typed : string
     ; state : [ `New | `Pending | `Active | `Success | `Failure ]
     }

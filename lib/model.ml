@@ -32,7 +32,7 @@ let make_text text ~(dim : Dim.t) : Text.t =
       (col, row, line_offset), word))
   |> List.concat
   |> List.mapi ~f:(fun id ((col, row, line_offset), word) ->
-    { Text.Word.id; col; row; line_offset; word; typed = ""; state = `Pending })
+    { Text.Word.id; col; row; line_offset; data = word; typed = ""; state = `Pending })
 ;;
 
 let set_cursor t cursor = { t with cursor }
@@ -42,7 +42,7 @@ let remake_text (text : Text.t) ~dim =
   let acc, line, _count =
     text
     |> List.fold ~init:([], [], 0) ~f:(fun (acc, line, cumul) word ->
-      let len = String.length word.word + 1 in
+      let len = String.length word.data + 1 in
       if cumul + len < cols
       then acc, word :: line, cumul + len
       else List.rev line :: acc, [ word ], len)
@@ -52,7 +52,7 @@ let remake_text (text : Text.t) ~dim =
     let seen = ref 0 in
     List.mapi line ~f:(fun col word ->
       let line_offset = !seen in
-      seen := line_offset + String.length word.word + 1;
+      seen := line_offset + String.length word.data + 1;
       { word with col; row; line_offset }))
   |> List.concat
 ;;
@@ -157,18 +157,18 @@ let update_problems t =
     let prev = i - 1 in
     let next = i + 1 in
     let focus = arr.(i) in
-    if (not (String.is_empty focus.typed)) && not (String.equal focus.word focus.typed)
+    if (not (String.is_empty focus.typed)) && not (String.equal focus.data focus.typed)
     then (
       problem_words
-        := Map.update !problem_words focus.word ~f:(function
+        := Map.update !problem_words focus.data ~f:(function
              | None -> 1
              | Some n -> n + 1);
       prev_words
         := if prev < 0
            then !prev_words
            else (
-             let prev_word = arr.(prev).word in
-             Map.update !prev_words focus.word ~f:(function
+             let prev_word = arr.(prev).data in
+             Map.update !prev_words focus.data ~f:(function
                | None -> Map.singleton (module String) prev_word 1
                | Some map ->
                  Map.update map prev_word ~f:(function
@@ -178,8 +178,8 @@ let update_problems t =
         := if next >= len
            then !next_words
            else (
-             let next_word = arr.(next).word in
-             Map.update !next_words focus.word ~f:(function
+             let next_word = arr.(next).data in
+             Map.update !next_words focus.data ~f:(function
                | None -> Map.singleton (module String) next_word 1
                | Some map ->
                  Map.update map next_word ~f:(function
@@ -190,11 +190,11 @@ let update_problems t =
            then !triples
            else (
              let triple =
-               let prev_word = arr.(prev).word in
-               let next_word = arr.(next).word in
-               sprintf "%s %s %s" prev_word focus.word next_word
+               let prev_word = arr.(prev).data in
+               let next_word = arr.(next).data in
+               sprintf "%s %s %s" prev_word focus.data next_word
              in
-             Map.update !triples focus.word ~f:(function
+             Map.update !triples focus.data ~f:(function
                | None -> Map.singleton (module String) triple 1
                | Some map ->
                  Map.update map triple ~f:(function
@@ -212,7 +212,7 @@ let update_problems t =
 let should_repeat t =
   let correct, total =
     List.fold t.text ~init:(0, 0) ~f:(fun (correct, total) word ->
-      (correct + if String.equal word.word word.typed then 1 else 0), total + 1)
+      (correct + if String.equal word.data word.typed then 1 else 0), total + 1)
   in
   let correct = Float.of_int correct in
   let total = Float.of_int total in
@@ -247,8 +247,8 @@ let process_tab t =
         | `New -> `Main, Corpus.next (), t
         | _ ->
           let t = restart_game t in
-          t.mode, List.map t.text ~f:(fun word -> word.word) |> String.concat ~sep:" ", t)
-      else `Main, List.map t.text ~f:(fun word -> word.word) |> String.concat ~sep:" ", t
+          t.mode, List.map t.text ~f:(fun word -> word.data) |> String.concat ~sep:" ", t)
+      else `Main, List.map t.text ~f:(fun word -> word.data) |> String.concat ~sep:" ", t
     | `Practice (next_text :: rest) ->
       if current_word.id = 0
       then (
@@ -256,8 +256,8 @@ let process_tab t =
         | `New -> `Practice rest, make_practice_text t next_text, t
         | _ ->
           let t = restart_game t in
-          t.mode, List.map t.text ~f:(fun word -> word.word) |> String.concat ~sep:" ", t)
-      else t.mode, List.map t.text ~f:(fun word -> word.word) |> String.concat ~sep:" ", t
+          t.mode, List.map t.text ~f:(fun word -> word.data) |> String.concat ~sep:" ", t)
+      else t.mode, List.map t.text ~f:(fun word -> word.data) |> String.concat ~sep:" ", t
   in
   create
     ~dim:t.dim
@@ -282,14 +282,14 @@ let process_endgame t =
       if should_repeat t
       then
         ( `Practice []
-        , List.map t.text ~f:(fun word -> word.word) |> String.concat ~sep:" "
+        , List.map t.text ~f:(fun word -> word.data) |> String.concat ~sep:" "
         , t )
       else `Main, Corpus.next (), t
     | `Practice (word :: rest) ->
       if should_repeat t
       then
         ( `Practice (word :: rest)
-        , List.map t.text ~f:(fun word -> word.word) |> String.concat ~sep:" "
+        , List.map t.text ~f:(fun word -> word.data) |> String.concat ~sep:" "
         , t )
       else `Practice rest, make_practice_text t word, t
   in
@@ -313,7 +313,7 @@ let handle_keypress t c =
       List.map t.text ~f:(fun word ->
         if word.id = id
         then (
-          let state = if String.equal word.word word.typed then `Success else `Failure in
+          let state = if String.equal word.data word.typed then `Success else `Failure in
           { word with state })
         else if word.id = id'
         then { word with state = `Active }
@@ -332,10 +332,10 @@ let handle_keypress t c =
     (match List.find t.text ~f:(fun word -> word.id = id) with
      | None -> t
      | Some word ->
-       let len = String.length word.word in
+       let len = String.length word.data in
        if offset < len
        then (
-         let c' = word.word.[offset] in
+         let c' = word.data.[offset] in
          if Char.equal c c' then { t with cursor = Cursor.make (id, offset + 1) } else t)
        else t)
 ;;
@@ -355,8 +355,8 @@ let render t =
   List.fold
     t.text
     ~init:board
-    ~f:(fun board { id; col; row; line_offset; word; state; typed } ->
-      let len = String.length word in
+    ~f:(fun board { id; col; row; line_offset; data; state; typed } ->
+      let len = String.length data in
       let len_typed = String.length typed in
       let rec loop i board =
         let pos = line_offset + i, row in
@@ -369,7 +369,7 @@ let render t =
             | `Success -> A.fg A.green
             | `Failure -> A.fg A.red
           in
-          let board = place (I.string attr (String.of_char word.[i])) pos board in
+          let board = place (I.string attr (String.of_char data.[i])) pos board in
           loop (i + 1) board)
         else board
       in
