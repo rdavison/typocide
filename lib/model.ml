@@ -32,7 +32,15 @@ let make_text text ~(dim : Dim.t) : Text.t =
       (col, row, line_offset), word))
   |> List.concat
   |> List.mapi ~f:(fun id ((col, row, line_offset), word) ->
-    { Text.Word.id; col; row; line_offset; data = word; typed = ""; state = `Pending })
+    { Text.Word.id
+    ; col
+    ; row
+    ; line_offset
+    ; data = word
+    ; typed = ""
+    ; log = []
+    ; state = `Pending
+    })
 ;;
 
 let set_cursor t cursor = { t with cursor }
@@ -322,10 +330,16 @@ let handle_keypress t c =
     let t = { t with text } in
     if id' >= List.length t.text then process_endgame t else t
   | _ ->
+    let s = String.of_char c in
     let text =
       List.map t.text ~f:(fun word ->
         if word.id = id
-        then { word with typed = word.typed ^ String.of_char c; state = `Active }
+        then
+          { word with
+            typed = word.typed ^ s
+          ; state = `Active
+          ; log = Text.Keylog.make s :: word.log
+          }
         else word)
     in
     let t = { t with text } in

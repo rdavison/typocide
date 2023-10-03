@@ -1,5 +1,22 @@
 open! Import
 
+module Keylog = struct
+  type t =
+    { keycode : string
+    ; time : Time_float_unix.t
+    }
+  [@@deriving sexp]
+
+  let make ?time keycode =
+    let time =
+      match time with
+      | None -> Time_float_unix.now ()
+      | Some time -> time
+    in
+    { keycode; time }
+  ;;
+end
+
 module Word = struct
   type t =
     { id : int
@@ -8,6 +25,7 @@ module Word = struct
     ; line_offset : int
     ; data : string
     ; typed : string
+    ; log : Keylog.t list
     ; state : [ `New | `Pending | `Active | `Success | `Failure ]
     }
   [@@deriving sexp]

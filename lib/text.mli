@@ -1,5 +1,15 @@
 open! Import
 
+module Keylog : sig
+  type t =
+    { keycode : string
+    ; time : Time_float_unix.t
+    }
+  [@@deriving sexp]
+
+  val make : ?time:Time_float_unix.t -> string -> t
+end
+
 module Word : sig
   type t =
     { id : int
@@ -8,6 +18,7 @@ module Word : sig
     ; line_offset : int
     ; data : string
     ; typed : string
+    ; log : Keylog.t list
     ; state : [ `New | `Pending | `Active | `Success | `Failure ]
     }
   [@@deriving sexp]
