@@ -12,12 +12,6 @@ type t =
   }
 [@@deriving sexp]
 
-open Notty
-open Notty.Infix
-
-let place img (x, y) on_ = I.hcat [ I.void x 1; I.vcat [ I.void 1 y; img ] ] </> on_
-let set_cursor t cursor = { t with cursor }
-
 let make_text text ~(dim : Dim.t) : Text.t =
   let cols, rows = Dim.cols_rows dim in
   let acc, line, _count =
@@ -41,6 +35,8 @@ let make_text text ~(dim : Dim.t) : Text.t =
     { Text.Word.id; col; row; line_offset; word; typed = ""; state = `Pending })
 ;;
 
+let set_cursor t cursor = { t with cursor }
+
 let remake_text (text : Text.t) ~dim =
   let cols, rows = Dim.cols_rows dim in
   let acc, line, _count =
@@ -61,8 +57,6 @@ let remake_text (text : Text.t) ~dim =
   |> List.concat
 ;;
 
-let set_dim t dim = { t with dim; text = remake_text t.text ~dim }
-
 let sanitize_text text =
   text
   |> String.split ~on:' '
@@ -72,6 +66,8 @@ let sanitize_text text =
     | other -> Some other)
   |> String.concat ~sep:" "
 ;;
+
+let set_dim t dim = { t with dim; text = remake_text t.text ~dim }
 
 let create ~dim ~cursor ~text ~mode ~prev_words ~next_words ~triples =
   let text =
@@ -346,7 +342,16 @@ let handle_keypress t c =
        else t)
 ;;
 
+let place img (x, y) on_ =
+  let open Notty.Infix in
+  let module I = Notty.I in
+  let module A = Notty.A in
+  I.hcat [ I.void x 1; I.vcat [ I.void 1 y; img ] ] </> on_
+;;
+
 let render t =
+  let module I = Notty.I in
+  let module A = Notty.A in
   let width, height = Dim.cols_rows t.dim in
   let board = I.char A.empty ' ' width height in
   List.fold
