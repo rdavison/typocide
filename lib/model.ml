@@ -73,7 +73,7 @@ let create ~dim ~cursor ~text ~mode ~prev_words ~next_words ~triples =
   let text =
     sanitize_text text
     |> make_text ~dim
-    |> List.map ~f:(fun info -> if info.id = 0 then { info with state = `New } else info)
+    |> List.map ~f:(fun word -> if word.id = 0 then { word with state = `New } else word)
   in
   let problem_words = Map.empty (module String) in
   { dim; cursor; text; mode; problem_words; prev_words; next_words; triples }
@@ -221,8 +221,8 @@ let should_repeat t =
 ;;
 
 let current_word t =
-  let wordnum, offset = Cursor.id_offset t.cursor in
-  List.find_exn t.text ~f:(fun info -> info.id = wordnum)
+  let id, _offset = Cursor.id_offset t.cursor in
+  List.find_exn t.text ~f:(fun word -> word.id = id)
 ;;
 
 let restart_game t =
@@ -304,41 +304,39 @@ let process_endgame t =
 ;;
 
 let handle_keypress t c =
-  let wordnum, offset = Cursor.id_offset t.cursor in
+  let id, offset = Cursor.id_offset t.cursor in
   match c with
   | ' ' ->
-    let t = { t with cursor = Cursor.make (wordnum + 1, 0) } in
-    let wordnum', offset' = Cursor.id_offset t.cursor in
+    let t = { t with cursor = Cursor.make (id + 1, 0) } in
+    let id', offset' = Cursor.id_offset t.cursor in
     let text =
-      List.map t.text ~f:(fun info ->
-        if info.id = wordnum
+      List.map t.text ~f:(fun word ->
+        if word.id = id
         then (
-          let state = if String.equal info.word info.typed then `Success else `Failure in
-          { info with state })
-        else if info.id = wordnum'
-        then { info with state = `Active }
-        else info)
+          let state = if String.equal word.word word.typed then `Success else `Failure in
+          { word with state })
+        else if word.id = id'
+        then { word with state = `Active }
+        else word)
     in
     let t = { t with text } in
-    if wordnum' >= List.length t.text then process_endgame t else t
+    if id' >= List.length t.text then process_endgame t else t
   | _ ->
     let text =
-      List.map t.text ~f:(fun info ->
-        if info.id = wordnum
-        then { info with typed = info.typed ^ String.of_char c; state = `Active }
-        else info)
+      List.map t.text ~f:(fun word ->
+        if word.id = id
+        then { word with typed = word.typed ^ String.of_char c; state = `Active }
+        else word)
     in
     let t = { t with text } in
-    (match List.find t.text ~f:(fun info -> info.id = wordnum) with
+    (match List.find t.text ~f:(fun word -> word.id = id) with
      | None -> t
-     | Some info ->
-       let len = String.length info.word in
+     | Some word ->
+       let len = String.length word.word in
        if offset < len
        then (
-         let c' = info.word.[offset] in
-         if Char.equal c c'
-         then { t with cursor = Cursor.make (wordnum, offset + 1) }
-         else t)
+         let c' = word.word.[offset] in
+         if Char.equal c c' then { t with cursor = Cursor.make (id, offset + 1) } else t)
        else t)
 ;;
 
