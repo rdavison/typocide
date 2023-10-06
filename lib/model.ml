@@ -122,7 +122,7 @@ let make_practice_text t word =
   let triples =
     List.init (practice_len * 3) ~f:(fun _ -> triples.(Random.int triples_len))
   in
-  let all = triples |> Array.of_list in
+  let all = Array.of_list triples in
   let len = Array.length all in
   List.init practice_len ~f:(fun _ -> all.(Random.int len)) |> String.concat ~sep:" "
 ;;
@@ -185,17 +185,17 @@ let update_problems t =
     let prev = i - 1 in
     let next = i + 1 in
     let focus = arr.(i) in
+    let wide_focus =
+      [ (if prev >= 0 then Some arr.(prev) else None)
+      ; Some focus
+      ; (if next < Array.length arr then Some arr.(next) else None)
+      ]
+      |> List.filter_opt
+      |> List.map ~f:(fun word -> word.data)
+      |> String.concat ~sep:" "
+    in
     if not (String.is_empty focus.typed)
-    then (
-      let wide_focus =
-        [ (if prev >= 0 then Some arr.(prev) else None)
-        ; Some focus
-        ; (if next < Array.length arr then Some arr.(next) else None)
-        ]
-        |> List.filter_opt
-        |> List.map ~f:(fun word -> word.data)
-        |> String.concat ~sep:" "
-      in
+    then
       if String.equal focus.data focus.typed
       then (
         let log =
@@ -229,7 +229,7 @@ let update_problems t =
           := Map.update !problem_words key ~f:(function
                | None -> 1
                | Some n -> n + 1);
-        update_triples key wide_focus triples))
+        update_triples key wide_focus triples)
   done;
   { t with
     problem_words = !problem_words
@@ -269,25 +269,14 @@ let restart_game t =
 let process_tab t =
   let current_word = current_word t in
   let mode, text, t =
-    match t.mode with
-    | `Main | `Practice [] ->
-      if current_word.id = 0
-      then (
-        match current_word.state with
-        | `New -> `Main, Corpus.next (), t
-        | _ ->
-          let t = restart_game t in
-          t.mode, List.map t.text ~f:(fun word -> word.data) |> String.concat ~sep:" ", t)
-      else `Main, List.map t.text ~f:(fun word -> word.data) |> String.concat ~sep:" ", t
-    | `Practice (next_text :: rest) ->
-      if current_word.id = 0
-      then (
-        match current_word.state with
-        | `New -> `Practice rest, make_practice_text t next_text, t
-        | _ ->
-          let t = restart_game t in
-          t.mode, List.map t.text ~f:(fun word -> word.data) |> String.concat ~sep:" ", t)
-      else t.mode, List.map t.text ~f:(fun word -> word.data) |> String.concat ~sep:" ", t
+    match t.mode, current_word.id, current_word.state with
+    | (`Main | `Practice []), 0, `New -> `Main, Corpus.next (), t
+    | `Practice (next_text :: rest), 0, `New ->
+      `Practice rest, make_practice_text t next_text, t
+    | _, _, _ ->
+      let t = restart_game t in
+      let text = List.map t.text ~f:(fun word -> word.data) |> String.concat ~sep:" " in
+      t.mode, text, t
   in
   create
     ~dim:t.dim
