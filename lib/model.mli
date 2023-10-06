@@ -9,6 +9,8 @@ type t = private
   ; next_words : int String.Map.t String.Map.t
   ; triples : int String.Map.t String.Map.t
   ; mode : [ `Main | `Practice of string list ]
+  ; bigram_times : Time_float.Span.t String.Map.t
+  ; word_times : Time_float.Span.t String.Map.t
   }
 [@@deriving sexp]
 
@@ -20,6 +22,8 @@ val create
   -> prev_words:int String.Map.t String.Map.t
   -> next_words:int String.Map.t String.Map.t
   -> triples:int String.Map.t String.Map.t
+  -> bigram_times:Time_float.Span.t String.Map.t
+  -> word_times:Time_float.Span.t String.Map.t
   -> t
 
 val set_dim : t -> Dim.t -> t

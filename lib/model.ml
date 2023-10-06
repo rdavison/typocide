@@ -9,6 +9,8 @@ type t =
   ; next_words : int String.Map.t String.Map.t
   ; triples : int String.Map.t String.Map.t
   ; mode : [ `Main | `Practice of string list ]
+  ; bigram_times : Time_float.Span.t String.Map.t
+  ; word_times : Time_float.Span.t String.Map.t
   }
 [@@deriving sexp]
 
@@ -77,143 +79,163 @@ let sanitize_text text =
 
 let set_dim t dim = { t with dim; text = remake_text t.text ~dim }
 
-let create ~dim ~cursor ~text ~mode ~prev_words ~next_words ~triples =
+let create
+  ~dim
+  ~cursor
+  ~text
+  ~mode
+  ~prev_words
+  ~next_words
+  ~triples
+  ~bigram_times
+  ~word_times
+  =
   let text =
     sanitize_text text
     |> make_text ~dim
     |> List.map ~f:(fun word -> if word.id = 0 then { word with state = `New } else word)
   in
   let problem_words = Map.empty (module String) in
-  { dim; cursor; text; mode; problem_words; prev_words; next_words; triples }
+  { dim
+  ; cursor
+  ; text
+  ; mode
+  ; problem_words
+  ; prev_words
+  ; next_words
+  ; triples
+  ; bigram_times
+  ; word_times
+  }
 ;;
 
 let make_practice_text t word =
   let practice_len = 10 in
-  match Map.find t.prev_words word, Map.find t.next_words word with
-  | None, None -> List.init practice_len ~f:(Fn.const word) |> String.concat ~sep:" "
-  | Some prevs, Some nexts ->
-    let prevs =
-      Map.to_alist prevs
-      |> List.fold ~init:[] ~f:(fun acc (prev, count) ->
-        List.init count ~f:(Fn.const prev) @ acc)
-      |> Array.of_list
-    in
-    let prev_len = Array.length prevs in
-    let nexts =
-      Map.to_alist nexts
-      |> List.fold ~init:[] ~f:(fun acc (next, count) ->
-        List.init count ~f:(Fn.const next) @ acc)
-      |> Array.of_list
-    in
-    let next_len = Array.length nexts in
-    let prevs =
-      List.init practice_len ~f:(fun _ -> prevs.(Random.int prev_len))
-      |> List.map ~f:(fun prev -> sprintf "%s %s" prev word)
-    in
-    let nexts =
-      List.init practice_len ~f:(fun _ -> nexts.(Random.int next_len))
-      |> List.map ~f:(fun next -> sprintf "%s %s" word next)
-    in
-    let triples =
-      Map.find_exn t.triples word
-      |> Map.to_alist
-      |> List.fold ~init:[] ~f:(fun acc (triple, count) ->
-        List.init count ~f:(Fn.const triple) @ acc)
-      |> Array.of_list
-    in
-    let triples_len = Array.length triples in
-    let triples =
-      List.init (practice_len * 3) ~f:(fun _ -> triples.(Random.int triples_len))
-    in
-    ignore prevs;
-    ignore nexts;
-    let all = triples |> Array.of_list in
-    let len = Array.length all in
-    List.init practice_len ~f:(fun _ -> all.(Random.int len)) |> String.concat ~sep:" "
-  | Some prevs, None ->
-    let prevs =
-      Map.to_alist prevs
-      |> List.fold ~init:[] ~f:(fun acc (prev, count) ->
-        List.init count ~f:(Fn.const prev) @ acc)
-      |> Array.of_list
-    in
-    let prev_len = Array.length prevs in
-    List.init practice_len ~f:(fun _ -> prevs.(Random.int prev_len))
-    |> List.concat_map ~f:(fun prev -> [ prev; word ])
-    |> String.concat ~sep:" "
-  | None, Some nexts ->
-    let nexts =
-      Map.to_alist nexts
-      |> List.fold ~init:[] ~f:(fun acc (next, count) ->
-        List.init count ~f:(Fn.const next) @ acc)
-      |> Array.of_list
-    in
-    let next_len = Array.length nexts in
-    List.init practice_len ~f:(fun _ -> nexts.(Random.int next_len))
-    |> List.concat_map ~f:(fun next -> [ word; next ])
-    |> String.concat ~sep:" "
+  let triples =
+    Map.find_exn t.triples word
+    |> Map.to_alist
+    |> List.fold ~init:[] ~f:(fun acc (triple, count) ->
+      List.init count ~f:(Fn.const triple) @ acc)
+    |> Array.of_list
+  in
+  let triples_len = Array.length triples in
+  let triples =
+    List.init (practice_len * 3) ~f:(fun _ -> triples.(Random.int triples_len))
+  in
+  let all = triples |> Array.of_list in
+  let len = Array.length all in
+  List.init practice_len ~f:(fun _ -> all.(Random.int len)) |> String.concat ~sep:" "
+;;
+
+let update_triples key wide_focus triples =
+  triples
+    := Map.update !triples key ~f:(function
+         | None -> Map.singleton (module String) wide_focus 1
+         | Some map ->
+           Map.update map wide_focus ~f:(function
+             | None -> 1
+             | Some n -> n + 1))
+;;
+
+let update_worst ratio key worst =
+  let w_ratio, w_word = !worst in
+  if Float.( > ) ratio w_ratio then worst := ratio, key
+;;
+
+let variation_window len = 10. *. Float.exp (Float.of_int len *. -1.)
+
+let process_word_time key start_time end_time word_times problem_words triples wide_focus =
+  let word_span = Time_float.diff end_time start_time in
+  let len = String.length key in
+  word_times
+    := Map.update !word_times key ~f:(function
+         | None -> word_span
+         | Some prev_avg ->
+           let next_avg =
+             Time_float.Span.(of_sec ((to_sec prev_avg +. to_sec word_span) /. 2.0))
+           in
+           let ratio = Time_float.Span.(to_sec next_avg /. to_sec prev_avg) in
+           let window = variation_window len in
+           if Float.( > ) ratio (window +. 1.)
+           then (
+             problem_words
+               := Map.update !problem_words key ~f:(function
+                    | None -> 1
+                    | Some n -> n + 1);
+             update_triples key wide_focus triples);
+           next_avg)
+;;
+
+let process_bigram_time key start_time end_time bigram_times =
+  let span = Time_float.diff end_time start_time in
+  bigram_times
+    := Map.update !bigram_times key ~f:(function
+         | None -> span
+         | Some span' -> Time_float.Span.(of_sec ((to_sec span' +. to_sec span) /. 2.0)))
 ;;
 
 let update_problems t =
   let arr = Array.of_list t.text in
   let len = Array.length arr in
   let problem_words = ref t.problem_words in
-  let prev_words = ref t.prev_words in
-  let next_words = ref t.next_words in
   let triples = ref t.triples in
+  let bigram_times = ref t.bigram_times in
+  let word_times = ref t.word_times in
   for i = 0 to len - 1 do
     let prev = i - 1 in
     let next = i + 1 in
     let focus = arr.(i) in
-    if (not (String.is_empty focus.typed)) && not (String.equal focus.data focus.typed)
+    if not (String.is_empty focus.typed)
     then (
-      problem_words
-        := Map.update !problem_words focus.data ~f:(function
-             | None -> 1
-             | Some n -> n + 1);
-      prev_words
-        := if prev < 0
-           then !prev_words
-           else (
-             let prev_word = arr.(prev).data in
-             Map.update !prev_words focus.data ~f:(function
-               | None -> Map.singleton (module String) prev_word 1
-               | Some map ->
-                 Map.update map prev_word ~f:(function
-                   | None -> 1
-                   | Some n -> n + 1)));
-      next_words
-        := if next >= len
-           then !next_words
-           else (
-             let next_word = arr.(next).data in
-             Map.update !next_words focus.data ~f:(function
-               | None -> Map.singleton (module String) next_word 1
-               | Some map ->
-                 Map.update map next_word ~f:(function
-                   | None -> 1
-                   | Some n -> n + 1)));
-      triples
-        := if prev < 0 || next >= len
-           then !triples
-           else (
-             let triple =
-               let prev_word = arr.(prev).data in
-               let next_word = arr.(next).data in
-               sprintf "%s %s %s" prev_word focus.data next_word
-             in
-             Map.update !triples focus.data ~f:(function
-               | None -> Map.singleton (module String) triple 1
-               | Some map ->
-                 Map.update map triple ~f:(function
-                   | None -> 1
-                   | Some n -> n + 1))))
+      let wide_focus =
+        [ (if prev >= 0 then Some arr.(prev) else None)
+        ; Some focus
+        ; (if next < Array.length arr then Some arr.(next) else None)
+        ]
+        |> List.filter_opt
+        |> List.map ~f:(fun word -> word.data)
+        |> String.concat ~sep:" "
+      in
+      if String.equal focus.data focus.typed
+      then (
+        let log =
+          focus.log
+          |> List.sort ~compare:(fun x y -> Time_float.compare x.time y.time)
+          |> Array.of_list
+        in
+        let len = Array.length log in
+        for i = 0 to len - 2 do
+          let start_time = log.(i).time in
+          if i = 0
+          then (
+            let end_time = log.(len - 1).time in
+            let key = focus.data in
+            process_word_time
+              key
+              start_time
+              end_time
+              word_times
+              problem_words
+              triples
+              wide_focus);
+          let j = i + 1 in
+          let end_time = log.(j).time in
+          let key = log.(i).keycode ^ log.(j).keycode in
+          process_bigram_time key start_time end_time bigram_times
+        done)
+      else (
+        let key = focus.data in
+        problem_words
+          := Map.update !problem_words key ~f:(function
+               | None -> 1
+               | Some n -> n + 1);
+        update_triples key wide_focus triples))
   done;
   { t with
     problem_words = !problem_words
-  ; prev_words = !prev_words
-  ; next_words = !next_words
   ; triples = !triples
+  ; bigram_times = !bigram_times
+  ; word_times = !word_times
   }
 ;;
 
@@ -275,6 +297,8 @@ let process_tab t =
     ~prev_words:t.prev_words
     ~next_words:t.next_words
     ~triples:t.triples
+    ~bigram_times:t.bigram_times
+    ~word_times:t.word_times
 ;;
 
 let process_endgame t =
@@ -309,6 +333,8 @@ let process_endgame t =
     ~prev_words:t.prev_words
     ~next_words:t.next_words
     ~triples:t.triples
+    ~bigram_times:t.bigram_times
+    ~word_times:t.word_times
 ;;
 
 let handle_keypress t c =
@@ -322,7 +348,7 @@ let handle_keypress t c =
         if word.id = id
         then (
           let state = if String.equal word.data word.typed then `Success else `Failure in
-          { word with state })
+          { word with state; log = List.rev word.log })
         else if word.id = id'
         then { word with state = `Active }
         else word)
@@ -397,11 +423,20 @@ let restore_state () =
 ;;
 
 let get dim =
-  let prev_words, next_words, triples =
+  let prev_words, next_words, triples, bigram_times, word_times =
     match restore_state () with
-    | Some state -> state.prev_words, state.next_words, state.triples
+    | Some state ->
+      ( state.prev_words
+      , state.next_words
+      , state.triples
+      , state.bigram_times
+      , state.word_times )
     | None ->
-      Map.empty (module String), Map.empty (module String), Map.empty (module String)
+      ( Map.empty (module String)
+      , Map.empty (module String)
+      , Map.empty (module String)
+      , Map.empty (module String)
+      , Map.empty (module String) )
   in
   create
     ~dim
@@ -411,6 +446,8 @@ let get dim =
     ~prev_words
     ~next_words
     ~triples
+    ~bigram_times
+    ~word_times
 ;;
 
 let save_state t =
