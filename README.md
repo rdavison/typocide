@@ -1,3 +1,5 @@
+<img alt="typocide" src="https://raw.githubusercontent.com/rdavison/typocide/main/typocide.png" width="200" height="239" />
+
 # Typocide
 Where Typos Meet Their Demise!
 
