@@ -1,5 +1,5 @@
 (library
- (name leveltypeml)
+ (name typocide)
  (libraries core async notty notty_async)
  (preprocess
   (pps ppx_jane))

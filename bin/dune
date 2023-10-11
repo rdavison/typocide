@@ -1,4 +1,4 @@
 (executable
- (public_name leveltypeml)
+ (public_name typocide)
  (name main)
- (libraries leveltypeml core_unix.command_unix))
+ (libraries typocide core_unix.command_unix))

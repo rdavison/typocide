@@ -1,1 +1,1 @@
-let () = Command_unix.run Leveltypeml.Cli.command
+let () = Command_unix.run Typocide.Cli.command
