@@ -3,6 +3,9 @@
 # Typocide
 Where Typos Meet Their Demise!
 
+# Prerequisites
+Requires opam: https://github.com/ocaml/opam
+
 # Setup
 ```bash
 cd typocide
