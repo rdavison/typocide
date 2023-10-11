@@ -18,7 +18,7 @@
 (package
  (name typocide)
  (synopsis "A typing tutor")
- (description "Where Typos Get Their Demise!")
+ (description "Where Typos Meet Their Demise!")
  (depends ocaml dune notty_async core_unix)
  (tags
   (typing tutor keyboard)))
