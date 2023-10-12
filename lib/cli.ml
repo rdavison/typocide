@@ -1,7 +1,7 @@
 open! Import
 module Term = Notty_async.Term
 
-let main ~frames_per_second () =
+let main ~frames_per_second ~state_dir () =
   let%bind term = Term.create () in
   let events = Term.events term in
   let stop = Pipe.closed events in
@@ -9,7 +9,7 @@ let main ~frames_per_second () =
   don't_wait_for
     (Pipe.iter_without_pushback events ~f:(function
       | `Key (`ASCII 'C', [ `Ctrl ]) ->
-        Model.save_state !m;
+        Model.save_state !m ~state_dir;
         Pipe.close_read events
       | `Key (`ASCII c, []) -> m := Model.handle_keypress !m c
       | `Key (`Tab, []) -> m := Model.process_tab !m
@@ -28,9 +28,25 @@ let main ~frames_per_second () =
 
 let command =
   Command.async
-    ~summary:"Typing tutor inspired by Leveltype"
+    ~summary:"Typing tutor inspired by Leveltype."
     ~behave_nicely_in_pipeline:false
     (let open Command.Let_syntax in
-     let%map_open frames_per_second = return 60 in
-     main ~frames_per_second)
+     let%map_open frames_per_second = return 60
+     and state_dir =
+       flag
+         "--state-dir"
+         (optional Filename_unix.arg_type)
+         ~doc:
+           (String.concat
+              ~sep:" "
+              [ "PATH Path to state directory."
+              ; (match Directories.state_dir with
+                 | None -> "If not specified, state will not be saved between runs."
+                 | Some dir -> sprintf "Default: %s" dir)
+              ])
+       |> map ~f:(function
+         | Some dir -> Some dir
+         | None -> Directories.state_dir)
+     in
+     main ~frames_per_second ~state_dir)
 ;;
