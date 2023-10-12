@@ -19,7 +19,7 @@
  (name typocide)
  (synopsis "A typing tutor")
  (description "Where Typos Meet Their Demise!")
- (depends ocaml dune notty_async core_unix)
+ (depends ocaml dune notty_async core_unix directories)
  (tags
   (typing tutor keyboard)))
 

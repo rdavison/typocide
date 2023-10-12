@@ -1,6 +1,6 @@
 (library
  (name typocide)
- (libraries core async notty notty_async)
+ (libraries core async notty notty_async directories)
  (preprocess
   (pps ppx_jane))
  (inline_tests)

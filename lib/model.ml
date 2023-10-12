@@ -439,6 +439,11 @@ let get dim =
     ~word_times
 ;;
 
-let save_state t =
-  Stdio.Out_channel.write_all "save_state.sexp" ~data:(sexp_of_t t |> Sexp.to_string)
+let save_state t ~state_dir =
+  match state_dir with
+  | None -> ()
+  | Some dir ->
+    Core_unix.mkdir_p dir;
+    let path = dir ^/ "state.0.sexp" in
+    Stdio.Out_channel.write_all path ~data:(sexp_of_t t |> Sexp.to_string)
 ;;
