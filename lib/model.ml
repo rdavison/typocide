@@ -14,6 +14,65 @@ type t =
   }
 [@@deriving sexp]
 
+let version = 0
+
+type model = t [@@deriving sexp]
+
+module V0 = struct
+  type nonrec t = t =
+    { dim : Dim.t
+    ; cursor : Cursor.t
+    ; text : Text.t
+    ; problem_words : int String.Map.t
+    ; prev_words : int String.Map.t String.Map.t
+    ; next_words : int String.Map.t String.Map.t
+    ; triples : int String.Map.t String.Map.t
+    ; mode : [ `Main | `Practice of string list ]
+    ; bigram_times : Time_float.Span.t String.Map.t
+    ; word_times : Time_float.Span.t String.Map.t
+    }
+  [@@deriving sexp]
+
+  let upgrade (t : t) : model = t
+end
+
+let save_state t ~state_dir =
+  match state_dir with
+  | None -> ()
+  | Some dir ->
+    Core_unix.mkdir_p dir;
+    let path = dir ^/ sprintf "state.%d.sexp" version in
+    Stdio.Out_channel.write_all path ~data:(sexp_of_t t |> Sexp.to_string)
+;;
+
+let restore_state ~state_dir : t option =
+  match state_dir with
+  | None -> None
+  | Some dir ->
+    let version =
+      Sys_unix.ls_dir dir
+      |> List.filter_map ~f:(fun item ->
+        match item |> String.strip |> String.split_on_chars ~on:[ '.' ] with
+        | [ "state"; version; "sexp" ] -> Some (Int.of_string version)
+        | _ -> None)
+      |> List.sort ~compare:(Comparable.reverse Int.compare)
+      |> List.hd
+    in
+    (match version with
+     | None -> None
+     | Some version ->
+       let basename = sprintf "state.%d.sexp" version in
+       if Sys_unix.file_exists_exn basename
+       then (
+         let parse s =
+           match version with
+           | 0 -> s |> V0.t_of_sexp |> V0.upgrade
+           | _ -> failwithf "Unable to parse state file with verson: %d" version ()
+         in
+         Some (Core.In_channel.read_all basename |> Sexp.of_string |> parse))
+       else None)
+;;
+
 let make_text text ~(dim : Dim.t) : Text.t =
   let cols, rows = Dim.cols_rows dim in
   let acc, line, _count =
@@ -405,15 +464,9 @@ let render t =
       loop 0 board)
 ;;
 
-let restore_state () =
-  if Sys_unix.file_exists_exn "save_state.sexp"
-  then Some (Core.In_channel.read_all "save_state.sexp" |> Sexp.of_string |> t_of_sexp)
-  else None
-;;
-
-let get dim =
+let get dim ~state_dir =
   let prev_words, next_words, triples, bigram_times, word_times =
-    match restore_state () with
+    match restore_state ~state_dir with
     | Some state ->
       ( state.prev_words
       , state.next_words
@@ -437,13 +490,4 @@ let get dim =
     ~triples
     ~bigram_times
     ~word_times
-;;
-
-let save_state t ~state_dir =
-  match state_dir with
-  | None -> ()
-  | Some dir ->
-    Core_unix.mkdir_p dir;
-    let path = dir ^/ "state.0.sexp" in
-    Stdio.Out_channel.write_all path ~data:(sexp_of_t t |> Sexp.to_string)
 ;;
