@@ -11,6 +11,7 @@ type t =
   ; mode : [ `Main | `Practice of string list ]
   ; bigram_times : Time_float.Span.t String.Map.t
   ; word_times : Time_float.Span.t String.Map.t
+  ; corpus : Corpus.t
   }
 [@@deriving sexp]
 
@@ -30,6 +31,7 @@ module V0 = struct
     ; mode : [ `Main | `Practice of string list ]
     ; bigram_times : Time_float.Span.t String.Map.t
     ; word_times : Time_float.Span.t String.Map.t
+    ; corpus : Corpus.t
     }
   [@@deriving sexp]
 
@@ -148,6 +150,7 @@ let create
   ~triples
   ~bigram_times
   ~word_times
+  ~corpus
   =
   let text =
     sanitize_text text
@@ -165,6 +168,7 @@ let create
   ; triples
   ; bigram_times
   ; word_times
+  ; corpus
   }
 ;;
 
@@ -329,7 +333,7 @@ let process_tab t =
   let current_word = current_word t in
   let mode, text, t =
     match t.mode, current_word.id, current_word.state with
-    | (`Main | `Practice []), 0, `New -> `Main, Corpus.next (), t
+    | (`Main | `Practice []), 0, `New -> `Main, Corpus.next t.corpus, t
     | `Practice (next_text :: rest), 0, `New ->
       `Practice rest, make_practice_text t next_text, t
     | _, _, _ ->
@@ -347,6 +351,7 @@ let process_tab t =
     ~triples:t.triples
     ~bigram_times:t.bigram_times
     ~word_times:t.word_times
+    ~corpus:t.corpus
 ;;
 
 let process_endgame t =
@@ -357,14 +362,14 @@ let process_endgame t =
       let problem_words = Map.to_alist t.problem_words |> List.map ~f:fst in
       (match problem_words with
        | fst :: rest -> `Practice rest, make_practice_text t fst, t
-       | [] -> `Main, Corpus.next (), t)
+       | [] -> `Main, Corpus.next t.corpus, t)
     | `Practice [] ->
       if should_repeat t
       then
         ( `Practice []
         , List.map t.text ~f:(fun word -> word.data) |> String.concat ~sep:" "
         , t )
-      else `Main, Corpus.next (), t
+      else `Main, Corpus.next t.corpus, t
     | `Practice (word :: rest) ->
       if should_repeat t
       then
@@ -383,6 +388,7 @@ let process_endgame t =
     ~triples:t.triples
     ~bigram_times:t.bigram_times
     ~word_times:t.word_times
+    ~corpus:t.corpus
 ;;
 
 let handle_keypress t c =
@@ -464,7 +470,7 @@ let render t =
       loop 0 board)
 ;;
 
-let get dim ~state_dir =
+let get dim ~state_dir ~corpus =
   let prev_words, next_words, triples, bigram_times, word_times =
     match restore_state ~state_dir with
     | Some state ->
@@ -483,11 +489,12 @@ let get dim ~state_dir =
   create
     ~dim
     ~cursor:(Cursor.make (0, 0))
-    ~text:(Corpus.next ())
+    ~text:(Corpus.next corpus)
     ~mode:`Main
     ~prev_words
     ~next_words
     ~triples
     ~bigram_times
     ~word_times
+    ~corpus
 ;;
