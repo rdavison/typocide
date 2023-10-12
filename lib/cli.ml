@@ -5,7 +5,7 @@ let main ~frames_per_second ~state_dir () =
   let%bind term = Term.create () in
   let events = Term.events term in
   let stop = Pipe.closed events in
-  let m = ref (Model.get (Dim.make (Term.size term))) in
+  let m = ref (Model.get (Dim.make (Term.size term)) ~state_dir) in
   don't_wait_for
     (Pipe.iter_without_pushback events ~f:(function
       | `Key (`ASCII 'C', [ `Ctrl ]) ->
