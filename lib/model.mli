@@ -11,6 +11,7 @@ type t = private
   ; mode : [ `Main | `Practice of string list ]
   ; bigram_times : Time_float.Span.t String.Map.t
   ; word_times : Time_float.Span.t String.Map.t
+  ; corpus : Corpus.t
   }
 [@@deriving sexp]
 
@@ -24,6 +25,7 @@ val create
   -> triples:int String.Map.t String.Map.t
   -> bigram_times:Time_float.Span.t String.Map.t
   -> word_times:Time_float.Span.t String.Map.t
+  -> corpus:Corpus.t
   -> t
 
 val set_dim : t -> Dim.t -> t
@@ -32,5 +34,5 @@ val set_cursor : t -> Cursor.t -> t
 val handle_keypress : t -> char -> t
 val process_endgame : t -> t
 val process_tab : t -> t
-val get : Dim.t -> state_dir:string option -> t
+val get : Dim.t -> state_dir:string option -> corpus:Corpus.t -> t
 val save_state : t -> state_dir:string option -> unit

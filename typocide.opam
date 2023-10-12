@@ -15,6 +15,7 @@ depends: [
   "notty_async"
   "core_unix"
   "directories"
+  "ppx_blob"
   "odoc" {with-doc}
 ]
 build: [

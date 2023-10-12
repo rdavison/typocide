@@ -1,8 +1,19 @@
 open! Import
 
-let next =
+type t =
+  { texts : string array
+  ; len : int
+  }
+[@@deriving sexp]
+
+let make path =
+  let lines =
+    match path with
+    | None -> String.split_lines [%blob "typeracer.txt"]
+    | Some path -> Stdio.In_channel.read_lines path
+  in
   let texts =
-    Stdio.In_channel.read_lines "corpus.txt"
+    lines
     |> List.filter_map ~f:(fun line ->
       match String.strip line with
       | "" -> None
@@ -10,5 +21,7 @@ let next =
     |> Array.of_list
   in
   let len = Array.length texts in
-  fun () -> texts.(Random.int len)
+  { texts; len }
 ;;
+
+let next { texts; len } = texts.(Random.int len)

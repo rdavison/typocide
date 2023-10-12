@@ -1,11 +1,11 @@
 open! Import
 module Term = Notty_async.Term
 
-let main ~frames_per_second ~state_dir () =
+let main ~frames_per_second ~state_dir ~corpus () =
   let%bind term = Term.create () in
   let events = Term.events term in
   let stop = Pipe.closed events in
-  let m = ref (Model.get (Dim.make (Term.size term)) ~state_dir) in
+  let m = ref (Model.get (Dim.make (Term.size term)) ~state_dir ~corpus) in
   don't_wait_for
     (Pipe.iter_without_pushback events ~f:(function
       | `Key (`ASCII 'C', [ `Ctrl ]) ->
@@ -47,6 +47,14 @@ let command =
        |> map ~f:(function
          | Some dir -> Some dir
          | None -> Directories.state_dir)
+     and corpus =
+       flag
+         "--corpus"
+         (optional Filename_unix.arg_type)
+         ~doc:
+           "PATH Path to corpus file. If not specified defaults to built-in corpus \
+            (typeracer)."
+       |> map ~f:Corpus.make
      in
-     main ~frames_per_second ~state_dir)
+     main ~frames_per_second ~state_dir ~corpus)
 ;;

@@ -2,6 +2,7 @@
  (name typocide)
  (libraries core async notty notty_async directories)
  (preprocess
-  (pps ppx_jane))
+  (pps ppx_jane ppx_blob))
+ (preprocessor_deps ../typeracer.txt)
  (inline_tests)
  (flags -open Core -open Async))
