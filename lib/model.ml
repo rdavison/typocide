@@ -51,6 +51,9 @@ let restore_state ~state_dir : t option =
   match state_dir with
   | None -> None
   | Some dir ->
+    match Sys_unix.file_exists dir with
+    | `No | `Unknown -> None
+    | `Yes ->
     let version =
       Sys_unix.ls_dir dir
       |> List.filter_map ~f:(fun item ->
