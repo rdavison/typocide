@@ -33,7 +33,7 @@ jobs:
         uses: ocaml/setup-ocaml@v2
         if: runner.os != 'Windows'
         with:
-          ocaml-compiler: "5.1"
+          ocaml-compiler: "ocaml-variants.4.07.1+mingw64"
           opam-repositories: |
             default: https://github.com/ocaml/opam-repository.git
 
@@ -44,9 +44,8 @@ jobs:
       - run: ls -laR
         continue-on-error: true
 
-      - name: Upload release
-        uses: Shopify/upload-to-release@v2.0.0
+      - uses: d1ceward/draft-assets-release-action@v2
         with:
-          name: typocide
-          path: bin/main.exe
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            bin/main.exe
