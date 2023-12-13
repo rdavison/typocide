@@ -1,7 +1,8 @@
 name: Build release
 
 on:
-  push:
+  release:
+    types: [created]
 
 permissions: read-all
 
@@ -13,7 +14,7 @@ jobs:
         os:
           - macos-latest
           - ubuntu-latest
-          - windows-latest
+          #- windows-latest
 
     runs-on: ${{ matrix.os }}
 
