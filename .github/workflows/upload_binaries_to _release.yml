@@ -4,7 +4,7 @@ on:
   release:
     types: [created]
 
-permissions: read-all
+permissions: write-all
 
 jobs:
   build:
@@ -49,4 +49,4 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            ./_build/default/bin
+            build/main.exe
