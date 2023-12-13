@@ -41,11 +41,12 @@ jobs:
 
       - run: opam exec -- dune build
       
-      - run: ls -laR
+      - run: ls -laR .
         continue-on-error: true
 
-      - uses: d1ceward/draft-assets-release-action@v2
+      - name: Release
+        uses: softprops/action-gh-release@v1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          name: ${{ github.sha }}
           files: |
-            bin/main.exe
+            build/main.exe
