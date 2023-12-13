@@ -14,8 +14,6 @@ jobs:
           - macos-latest
           - ubuntu-latest
           - windows-latest
-        ocaml-compiler:
-          - "5.1"
 
     runs-on: ${{ matrix.os }}
 
@@ -23,16 +21,26 @@ jobs:
       - name: Checkout tree
         uses: actions/checkout@v4
 
-      - name: Set-up OCaml ${{ matrix.ocaml-compiler }}
+      - name: Set-up OCaml on Windows
         uses: ocaml/setup-ocaml@v2
+        if: runner.os == 'Windows'
         with:
-          ocaml-compiler: ${{ matrix.ocaml-compiler }}
+          opam-repositories: |
+            default: https://github.com/ocaml-opam/opam-repository-mingw.git#sunset
+    
+      - name: Set-up OCaml on Unix
+        uses: ocaml/setup-ocaml@v2
+        if: runner.os != 'Windows'
+        with:
+          opam-repositories: |
+            default: https://github.com/ocaml/opam-repository.git
 
       - run: opam install . --deps-only
 
       - run: opam exec -- dune build
       
-      - run: run ls -la
+      - run: ls -laR
+        continue-on-error: true
 
       - name: Upload release
         uses: Shopify/upload-to-release@v2.0.0
