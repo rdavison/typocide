@@ -25,6 +25,7 @@ jobs:
         uses: ocaml/setup-ocaml@v2
         if: runner.os == 'Windows'
         with:
+          opam-compiler: "5.1"
           opam-repositories: |
             default: https://github.com/ocaml-opam/opam-repository-mingw.git#sunset
     
@@ -32,6 +33,7 @@ jobs:
         uses: ocaml/setup-ocaml@v2
         if: runner.os != 'Windows'
         with:
+          opam-compiler: "5.1"
           opam-repositories: |
             default: https://github.com/ocaml/opam-repository.git
 
