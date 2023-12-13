@@ -35,7 +35,7 @@ jobs:
       - run: run ls -la
 
       - name: Upload release
-        uses: Shopify/upload-to-release@v2
+        uses: Shopify/upload-to-release@v2.0.0
         with:
           name: typocide
           path: bin/main.exe
