@@ -1,0 +1,42 @@
+name: Build release
+
+on:
+  push:
+
+permissions: read-all
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - ubuntu-latest
+          - windows-latest
+        ocaml-compiler:
+          - "5.1"
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout tree
+        uses: actions/checkout@v4
+
+      - name: Set-up OCaml ${{ matrix.ocaml-compiler }}
+        uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
+
+      - run: opam install . --deps-only
+
+      - run: opam exec -- dune build
+      
+      - run: run ls -la
+
+      - name: Upload release
+        uses: Shopify/upload-to-release@v1
+        with:
+          name: typocide
+          path: bin/main.exe
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
