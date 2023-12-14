@@ -42,7 +42,7 @@ jobs:
 
       - run: opam exec -- dune build
 
-      - run: mv ./_build/default/bin/main.exe ./_build/default/bin/Typocide_${{ runner.os }}.exe
+      - run: mv ./_build/default/bin/main.exe ./_build/default/bin/Typocide_${{ runner.os }}
       
       - run: ls -laR .
         continue-on-error: true
@@ -51,4 +51,4 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            ./_build/default/bin/Typocide_${{ runner.os }}.exe
+            ./_build/default/bin/Typocide_${{ runner.os }}
