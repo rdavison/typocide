@@ -398,6 +398,7 @@ let handle_keypress t c =
   let id, offset = Cursor.id_offset t.cursor in
   match c with
   | ' ' ->
+    if offset = 0 then t else
     let t = { t with cursor = Cursor.make (id + 1, 0) } in
     let id', offset' = Cursor.id_offset t.cursor in
     let text =
